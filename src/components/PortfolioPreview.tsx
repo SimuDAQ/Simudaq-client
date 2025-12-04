@@ -27,7 +27,7 @@ const PortfolioPreview = () => {
               <br />구축하세요
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              1000만원의 가상 자금으로 시작하세요. 
+              가상 자금으로 시작하세요. 
               실제 주식 시장과 동일한 환경에서 포트폴리오를 구성하고,
               투자 전략을 테스트해보세요.
             </p>

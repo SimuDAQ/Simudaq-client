@@ -20,8 +20,7 @@ const CTASection = () => {
           </h2>
           
           <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
-            가입 즉시 1000만원의 가상 자금이 지급됩니다.
-            실제 돈을 투자하기 전, Simudaq에서 연습하세요.
+            실제 돈을 투자하기 전, Simudaq에서 연습해보세요.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

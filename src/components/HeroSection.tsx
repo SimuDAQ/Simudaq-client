@@ -40,7 +40,7 @@ const HeroSection = () => {
           {/* Subheading */}
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mb-10 animate-slide-up" style={{ animationDelay: '0.1s' }}>
             실제 시장 데이터로 모의 투자를 경험하세요. 
-            1000만원의 가상 자금으로 나만의 포트폴리오를 만들고, 
+            가상 자금으로 나만의 포트폴리오를 만들고, 
             투자 실력을 키워보세요.
           </p>
 
