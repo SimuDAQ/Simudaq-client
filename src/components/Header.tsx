@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Menu } from "lucide-react";
+import { TrendingUp, Menu, Search } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 const Header = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -10,15 +11,19 @@ const Header = () => {
       <div className="container px-4 md:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <a href="/" className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-cyan-400 flex items-center justify-center">
               <TrendingUp className="h-5 w-5 text-primary-foreground" />
             </div>
             <span className="font-display font-bold text-xl">Simudaq</span>
-          </a>
+          </Link>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-8">
+            <Link to="/search" className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+              <Search className="w-4 h-4" />
+              종목검색
+            </Link>
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               기능
             </a>
@@ -27,9 +32,6 @@ const Header = () => {
             </a>
             <a href="#ranking" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               랭킹
-            </a>
-            <a href="#learn" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              투자 교육
             </a>
           </nav>
 
@@ -56,6 +58,10 @@ const Header = () => {
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-border">
             <nav className="flex flex-col gap-4">
+              <Link to="/search" className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+                <Search className="w-4 h-4" />
+                종목검색
+              </Link>
               <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 기능
               </a>
@@ -64,9 +70,6 @@ const Header = () => {
               </a>
               <a href="#ranking" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 랭킹
-              </a>
-              <a href="#learn" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                투자 교육
               </a>
               <div className="flex gap-3 pt-4 border-t border-border">
                 <Button variant="ghost" size="sm" className="flex-1">
