@@ -1,73 +1,38 @@
-# Welcome to your Lovable project
+# Simudaq
 
-## Project info
+## 소개
 
-**URL**: https://lovable.dev/projects/30459a3f-be6c-4c0d-973f-ef8ab79554e5
+Simudaq은 실제 한국 주식 시장 데이터를 활용한 모의 투자 서비스입니다. 초보 투자자부터 숙련된 트레이더까지, 위험 부담 없이 투자 전략을 연습하고 검증할 수 있는 환경을 제공합니다.
 
-## How can I edit this code?
+## 기술 스택
 
-There are several ways of editing your application.
+- **Vite** 
+- **TypeScript** 
+- **React** 
+- **shadcn/ui** 
+- **Tailwind CSS** 
+- **React Query**
+- **React Router** 
+- **Recharts** 
 
-**Use Lovable**
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/30459a3f-be6c-4c0d-973f-ef8ab79554e5) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### 사용 가능한 명령어
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+npm run dev          # 개발 서버 시작
+npm run build        # 프로덕션 빌드
+npm run build:dev    # 개발 모드 빌드
+npm run lint         # 코드 린팅
+npm run preview      # 빌드 결과 미리보기
 ```
 
-**Edit a file directly in GitHub**
+## 프로젝트 구조조
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```
+Simudaq-client/
+├── src/              # 소스 코드
+├── public/           # 정적 파일
+├── node_modules/     # 의존성 패키지
+└── package.json      # 프로젝트 설정
+```
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/30459a3f-be6c-4c0d-973f-ef8ab79554e5) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
