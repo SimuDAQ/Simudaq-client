@@ -36,8 +36,8 @@ const Header = () => {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" size="sm">
-              로그인
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/login">로그인</Link>
             </Button>
             <Button variant="default" size="sm">
               무료 시작
@@ -71,8 +71,8 @@ const Header = () => {
                 랭킹
               </a>
               <div className="flex gap-3 pt-4 border-t border-border">
-                <Button variant="ghost" size="sm" className="flex-1">
-                  로그인
+                <Button variant="ghost" size="sm" className="flex-1" asChild>
+                  <Link to="/login">로그인</Link>
                 </Button>
                 <Button variant="default" size="sm" className="flex-1">
                   무료 시작

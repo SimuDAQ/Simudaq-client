@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown, Wallet, PieChart, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 
 const portfolioStocks = [
   { name: "삼성전자", shares: 50, avgPrice: 71200, currentPrice: 72400, change: 1.69 },
@@ -32,9 +33,11 @@ const PortfolioPreview = () => {
               투자 전략을 테스트해보세요.
             </p>
             <div className="flex gap-4">
-              <Button variant="hero" size="lg">
-                지금 시작하기
-                <ArrowUpRight className="h-4 w-4" />
+              <Button variant="hero" size="lg" asChild>
+                <Link to="/login">
+                  지금 시작하기
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
               </Button>
             </div>
           </div>
