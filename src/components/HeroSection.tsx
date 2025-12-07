@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Play, TrendingUp } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const HeroSection = () => {
   return (
@@ -46,9 +47,11 @@ const HeroSection = () => {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-            <Button variant="hero" size="xl">
-              무료로 시작하기
-              <ArrowRight className="h-5 w-5" />
+            <Button variant="hero" size="xl" asChild>
+              <Link to="/login">
+                무료로 시작하기
+                <ArrowRight className="h-5 w-5" />
+              </Link>
             </Button>
             <Button variant="hero-outline" size="xl">
               <Play className="h-5 w-5" />
