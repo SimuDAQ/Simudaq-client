@@ -58,6 +58,7 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
   const chartInstanceRef = useRef<IChartApi | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seriesRef = useRef<any>(null); // 여러 타입의 series를 담을 수 있도록
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const nextDateTimeRef = useRef<string | null>(null);
   const isLoadingRef = useRef(false);
   const shouldLoadMoreRef = useRef(false);
@@ -288,6 +289,105 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
 
     timeScale.subscribeVisibleLogicalRangeChange(handleVisibleLogicalRangeChange);
 
+    // 툴팁 설정
+    if (tooltipRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const handleCrosshairMove = (param: any) => {
+        if (!tooltipRef.current) return;
+
+        if (
+          !param.point ||
+          !param.time ||
+          param.point.x < 0 ||
+          param.point.y < 0
+        ) {
+          tooltipRef.current.style.display = 'none';
+          return;
+        }
+
+        const data = param.seriesData.get(newSeries);
+        if (!data) {
+          tooltipRef.current.style.display = 'none';
+          return;
+        }
+
+        // chartData에서 해당 시간의 전체 데이터 찾기
+        const timestamp = param.time;
+        const matchedData = chartData.find((item) => {
+          const parseKSTtoTimestamp = (dateTimeStr: string): number => {
+            const [datePart, timePart] = dateTimeStr.split('T');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute, second] = timePart.split(':').map(Number);
+            const timestampValue = Date.UTC(year, month - 1, day, hour, minute, second);
+            return Math.floor(timestampValue / 1000);
+          };
+          return parseKSTtoTimestamp(item.dateTime) === timestamp;
+        });
+
+        if (!matchedData) {
+          tooltipRef.current.style.display = 'none';
+          return;
+        }
+
+        // 날짜/시간 포맷팅
+        const date = new Date(timestamp * 1000);
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        const hour = String(date.getUTCHours()).padStart(2, '0');
+        const minute = String(date.getUTCMinutes()).padStart(2, '0');
+        const formattedDate = `${year}-${month}-${day} ${hour}:${minute}`;
+
+        // 툴팁 내용 구성
+        const tooltipContent = `
+          <div style="font-size: 12px; color: #71717a; margin-bottom: 4px;">${formattedDate}</div>
+          <div style="display: flex; flex-direction: column; gap: 2px; font-size: 13px;">
+            ${chartType === 'candlestick' ? `
+              <div><span style="color: #a1a1aa;">시가:</span> <span style="color: #fff; margin-left: 8px;">${matchedData.open.toLocaleString()}</span></div>
+              <div><span style="color: #a1a1aa;">고가:</span> <span style="color: #fff; margin-left: 8px;">${matchedData.high.toLocaleString()}</span></div>
+              <div><span style="color: #a1a1aa;">저가:</span> <span style="color: #fff; margin-left: 8px;">${matchedData.low.toLocaleString()}</span></div>
+              <div><span style="color: #a1a1aa;">종가:</span> <span style="color: #fff; margin-left: 8px;">${matchedData.close.toLocaleString()}</span></div>
+            ` : `
+              <div><span style="color: #a1a1aa;">가격:</span> <span style="color: #fff; margin-left: 8px;">${matchedData.close.toLocaleString()}</span></div>
+            `}
+            <div><span style="color: #a1a1aa;">거래량:</span> <span style="color: #fff; margin-left: 8px;">${matchedData.volume.toLocaleString()}</span></div>
+            <div><span style="color: #a1a1aa;">거래대금:</span> <span style="color: #fff; margin-left: 8px;">${matchedData.accumulatedAmount.toLocaleString()}</span></div>
+          </div>
+        `;
+
+        tooltipRef.current.innerHTML = tooltipContent;
+        tooltipRef.current.style.display = 'block';
+
+        // 툴팁 위치 계산
+        const chartWidth = chartContainerRef.current?.clientWidth || 0;
+        const tooltipWidth = 200;
+        const tooltipHeight = tooltipRef.current.offsetHeight;
+
+        let left = param.point.x + 10;
+        let top = param.point.y - tooltipHeight / 2;
+
+        // 오른쪽 경계 체크
+        if (left + tooltipWidth > chartWidth) {
+          left = param.point.x - tooltipWidth - 10;
+        }
+
+        // 위쪽 경계 체크
+        if (top < 0) {
+          top = 0;
+        }
+
+        // 아래쪽 경계 체크
+        if (top + tooltipHeight > 350) {
+          top = 350 - tooltipHeight;
+        }
+
+        tooltipRef.current.style.left = left + 'px';
+        tooltipRef.current.style.top = top + 'px';
+      };
+
+      chart.subscribeCrosshairMove(handleCrosshairMove);
+    }
+
     const handleResize = () => {
       if (chartContainerRef.current) {
         chart.applyOptions({
@@ -306,7 +406,7 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
       seriesRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockCode, selectedGroupIndex, selectedOptionIndex, isPositive, chartType]);
+  }, [stockCode, selectedGroupIndex, selectedOptionIndex, isPositive, chartType, chartData, basePrice]);
 
   // 차트 데이터 업데이트 (데이터 변경 시)
   useEffect(() => {
@@ -515,7 +615,21 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
           <p className="text-muted-foreground">차트 로딩 중...</p>
         </div>
       ) : (
-        <div ref={chartContainerRef} className="h-[350px]" />
+        <div className="relative">
+          <div ref={chartContainerRef} className="h-[350px]" />
+          <div
+            ref={tooltipRef}
+            className="absolute pointer-events-none z-10 hidden"
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '6px',
+              padding: '8px 12px',
+              backdropFilter: 'blur(8px)',
+              minWidth: '200px',
+            }}
+          />
+        </div>
       )}
     </div>
   );
