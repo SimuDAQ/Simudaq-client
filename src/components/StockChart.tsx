@@ -211,12 +211,12 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
     let newSeries: any;
     if (chartType === 'candlestick') {
       newSeries = chart.addCandlestickSeries({
-        upColor: '#3b82f6', // 파란색
-        downColor: '#ef4444', // 빨간색
-        borderUpColor: '#3b82f6',
-        borderDownColor: '#ef4444',
-        wickUpColor: '#3b82f6',
-        wickDownColor: '#ef4444',
+        upColor: '#ef4444', // 빨간색 (상승)
+        downColor: '#3b82f6', // 파란색 (하락)
+        borderUpColor: '#ef4444',
+        borderDownColor: '#3b82f6',
+        wickUpColor: '#ef4444',
+        wickDownColor: '#3b82f6',
       });
     } else if (chartType === 'area') {
       newSeries = chart.addAreaSeries({
