@@ -107,7 +107,7 @@ const StockDetail = () => {
 
           {/* Chart */}
           <div className="mb-6">
-            <StockChart basePrice={stock.price} change={stock.change} />
+            <StockChart stockCode={code || ''} basePrice={stock.price} change={stock.change} />
           </div>
 
           {/* Info Grid */}

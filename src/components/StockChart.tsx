@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, IChartApi, UTCTimestamp } from "lightweight-charts";
 import { cn } from "@/lib/utils";
 import { chartService } from "@/services/chartService";
-import { ChartData } from "@/types/chart";
+import { websocketService } from "@/services/websocketService";
+import { ChartData, RealtimeStockData } from "@/types/chart";
 
 interface StockChartProps {
   stockCode: string;
@@ -54,6 +55,7 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [shortCode, setShortCode] = useState<string | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<IChartApi | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -148,6 +150,9 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
 
       setChartData(response.candles);
       nextDateTimeRef.current = response.nextDateTime;
+
+      // stockCode가 실제로는 shortCode이므로 WebSocket 구독에 사용
+      setShortCode(response.stockCode);
     } catch (error) {
       console.error("Failed to fetch chart data:", error);
       setChartData([]);
@@ -476,6 +481,55 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
       isInitialLoadRef.current = false;
     }
   }, [chartData, selectedOption.interval, chartType]);
+
+  // WebSocket 구독 관리 (분봉에서만 실시간 데이터 구독)
+  useEffect(() => {
+    // 분봉이 아니거나 shortCode가 없으면 구독하지 않음
+    if (!selectedOption.interval.startsWith('min:') || !shortCode) {
+      return;
+    }
+
+    console.log('[StockChart] Subscribing to WebSocket for:', shortCode);
+
+    // WebSocket 구독
+    websocketService.subscribe(
+      shortCode,
+      (data: RealtimeStockData) => {
+        console.log('[StockChart] Real-time data received:', data);
+
+        // 실시간 데이터를 차트 데이터에 추가/업데이트
+        setChartData((prevData) => {
+          const existingIndex = prevData.findIndex(
+            (item) => item.dateTime === data.dateTime
+          );
+
+          if (existingIndex >= 0) {
+            // 기존 데이터 업데이트
+            const newData = [...prevData];
+            newData[existingIndex] = data;
+            return newData;
+          } else {
+            // 새로운 데이터 추가
+            return [...prevData, data].sort((a, b) =>
+              new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
+            );
+          }
+        });
+      },
+      (response) => {
+        console.log('[StockChart] Subscription response:', response);
+      },
+      (error) => {
+        console.error('[StockChart] WebSocket error:', error);
+      }
+    );
+
+    // 컴포넌트 언마운트 또는 stockCode 변경 시 구독 해제
+    return () => {
+      console.log('[StockChart] Unsubscribing from WebSocket for:', shortCode);
+      websocketService.unsubscribe(shortCode);
+    };
+  }, [shortCode, selectedOption.interval]);
 
   const handleGroupChange = (groupIndex: number) => {
     setSelectedGroupIndex(groupIndex);
