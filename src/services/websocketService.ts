@@ -2,7 +2,7 @@ import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
 const WS_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
-const WS_ENDPOINT = "/ws";
+const WS_ENDPOINT = "/stock";
 
 export interface WebSocketSubscriptionResponse {
   status: string;
@@ -22,7 +22,90 @@ export interface RealtimeStockData {
   accumulatedAmount: number;
 }
 
-type MessageCallback = (data: RealtimeStockData) => void;
+export interface PriceLevel {
+  price: string;
+  volume: string;
+}
+
+export interface ExpectedTrade {
+  price: string;
+  volume: string;
+  totalVolume: string;
+  priceChange: string;
+  priceSign: string;
+  priceChangeRate: string;
+}
+
+export interface StockAskBidData {
+  stockCode: string;
+  businessTime: string;
+  timeCode: string;
+  askPrices: PriceLevel[];
+  bidPrices: PriceLevel[];
+  totalAskVolume: string;
+  totalAskVolumeChange: string;
+  totalBidVolume: string;
+  totalBidVolumeChange: string;
+  afterHoursTotalAskVolume: string;
+  afterHoursTotalBidVolume: string;
+  afterHoursTotalAskVolumeChange: string;
+  afterHoursTotalBidVolumeChange: string;
+  expectedTrade: ExpectedTrade;
+  accumulatedVolume: string;
+  tradeTypeCode: string;
+}
+
+export interface StockExecutionData {
+  stockCode: string;
+  executionTime: string;
+  currentPrice: string;
+  priceChangeSign: string;
+  priceChange: string;
+  priceChangeRate: string;
+  weightedAveragePrice: string;
+  openPrice: string;
+  highPrice: string;
+  lowPrice: string;
+  askPrice1: string;
+  bidPrice1: string;
+  executionVolume: string;
+  accumulatedVolume: string;
+  accumulatedTradeAmount: string;
+  sellExecutionCount: string;
+  buyExecutionCount: string;
+  netBuyExecutionCount: string;
+  executionStrength: string;
+  totalSellVolume: string;
+  totalBuyVolume: string;
+  executionType: string;
+  buyRate: string;
+  volumeChangeRate: string;
+  openPriceTime: string;
+  openPriceChangeSign: string;
+  openPriceChange: string;
+  highPriceTime: string;
+  highPriceChangeSign: string;
+  highPriceChange: string;
+  lowPriceTime: string;
+  lowPriceChangeSign: string;
+  lowPriceChange: string;
+  businessDate: string;
+  marketOperationCode: string;
+  tradingHaltYn: string;
+  askVolume1: string;
+  bidVolume1: string;
+  totalAskVolume: string;
+  totalBidVolume: string;
+  volumeTurnoverRate: string;
+  previousDaySameTimeVolume: string;
+  previousDaySameTimeVolumeRate: string;
+  timeClassCode: string;
+  marketClosureTypeCode: string;
+  viStandardPrice: string;
+}
+
+type AskBidCallback = (data: StockAskBidData) => void;
+type ExecutionCallback = (data: StockExecutionData) => void;
 type ReplyCallback = (response: WebSocketSubscriptionResponse) => void;
 type ErrorCallback = (error: Error) => void;
 
@@ -133,7 +216,8 @@ class WebSocketService {
 
   async subscribe(
     stockCode: string,
-    onMessage: MessageCallback,
+    onAskBid: AskBidCallback,
+    onExecution: ExecutionCallback,
     onReply?: ReplyCallback,
     onError?: ErrorCallback
   ): Promise<void> {
@@ -145,12 +229,50 @@ class WebSocketService {
       }
 
       // 이미 구독 중이면 무시
-      if (this.subscriptions.has(stockCode)) {
+      if (this.subscriptions.has(`askbid-${stockCode}`) || this.subscriptions.has(`execution-${stockCode}`)) {
         console.log(`[WebSocket] Already subscribed to ${stockCode}`);
         return;
       }
 
-      // 구독 요청 전송
+      // 1. /topic/stock/askbid/{shortCode} 구독
+      const askBidSubscription = this.client.subscribe(
+        `/topic/stock/askbid/${stockCode}`,
+        (message: IMessage) => {
+          try {
+            const data: StockAskBidData = JSON.parse(message.body);
+            console.log(`[WebSocket] AskBid data received for ${stockCode}:`, data);
+            onAskBid(data);
+          } catch (error) {
+            console.error('[WebSocket] Failed to parse askbid message:', error);
+            if (onError) {
+              onError(error as Error);
+            }
+          }
+        }
+      );
+      this.subscriptions.set(`askbid-${stockCode}`, askBidSubscription);
+      console.log(`[WebSocket] Subscribed to /topic/stock/askbid/${stockCode}`);
+
+      // 2. /topic/stock/execution/{shortCode} 구독
+      const executionSubscription = this.client.subscribe(
+        `/topic/stock/execution/${stockCode}`,
+        (message: IMessage) => {
+          try {
+            const data: StockExecutionData = JSON.parse(message.body);
+            console.log(`[WebSocket] Execution data received for ${stockCode}:`, data);
+            onExecution(data);
+          } catch (error) {
+            console.error('[WebSocket] Failed to parse execution message:', error);
+            if (onError) {
+              onError(error as Error);
+            }
+          }
+        }
+      );
+      this.subscriptions.set(`execution-${stockCode}`, executionSubscription);
+      console.log(`[WebSocket] Subscribed to /topic/stock/execution/${stockCode}`);
+
+      // 3. 구독 요청 전송 to /app/stock/subscribe
       this.client.publish({
         destination: '/app/stock/subscribe',
         body: JSON.stringify({ stockCode }),
@@ -158,38 +280,13 @@ class WebSocketService {
 
       console.log(`[WebSocket] Subscription request sent for ${stockCode}`);
 
-      // 응답 대기 후 데이터 토픽 구독
-      setTimeout(() => {
-        if (!this.client) return;
-
-        const dataTopicSubscription = this.client.subscribe(
-          `/topic/stock/${stockCode}`,
-          (message: IMessage) => {
-            try {
-              const data: RealtimeStockData = JSON.parse(message.body);
-              console.log(`[WebSocket] Data received for ${stockCode}:`, data);
-              onMessage(data);
-            } catch (error) {
-              console.error('[WebSocket] Failed to parse message:', error);
-              if (onError) {
-                onError(error as Error);
-              }
-            }
-          }
-        );
-
-        this.subscriptions.set(stockCode, dataTopicSubscription);
-        console.log(`[WebSocket] Subscribed to data topic: /topic/stock/${stockCode}`);
-
-        if (onReply) {
-          onReply({
-            status: 'success',
-            message: 'subscribed',
-            stockCode,
-            dataEndpoint: `/topic/stock/${stockCode}`,
-          });
-        }
-      }, 500);
+      if (onReply) {
+        onReply({
+          status: 'success',
+          message: 'subscribed',
+          stockCode,
+        });
+      }
     } catch (error) {
       console.error('[WebSocket] Subscribe error:', error);
       if (onError) {
@@ -206,8 +303,10 @@ class WebSocketService {
         return;
       }
 
-      const subscription = this.subscriptions.get(stockCode);
-      if (!subscription) {
+      const askBidSubscription = this.subscriptions.get(`askbid-${stockCode}`);
+      const executionSubscription = this.subscriptions.get(`execution-${stockCode}`);
+
+      if (!askBidSubscription && !executionSubscription) {
         console.log(`[WebSocket] Not subscribed to ${stockCode}`);
         return;
       }
@@ -218,9 +317,19 @@ class WebSocketService {
         body: JSON.stringify({ stockCode }),
       });
 
-      // 데이터 토픽 구독 해제
-      subscription.unsubscribe();
-      this.subscriptions.delete(stockCode);
+      // askbid 토픽 구독 해제
+      if (askBidSubscription) {
+        askBidSubscription.unsubscribe();
+        this.subscriptions.delete(`askbid-${stockCode}`);
+        console.log(`[WebSocket] Unsubscribed from /topic/stock/askbid/${stockCode}`);
+      }
+
+      // execution 토픽 구독 해제
+      if (executionSubscription) {
+        executionSubscription.unsubscribe();
+        this.subscriptions.delete(`execution-${stockCode}`);
+        console.log(`[WebSocket] Unsubscribed from /topic/stock/execution/${stockCode}`);
+      }
 
       console.log(`[WebSocket] Unsubscribed from ${stockCode}`);
     } catch (error) {
@@ -234,7 +343,7 @@ class WebSocketService {
   }
 
   isSubscribed(stockCode: string): boolean {
-    return this.subscriptions.has(stockCode);
+    return this.subscriptions.has(`askbid-${stockCode}`) || this.subscriptions.has(`execution-${stockCode}`);
   }
 }
 
