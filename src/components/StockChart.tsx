@@ -268,15 +268,15 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
       // 최대 줌 아웃 제한 (interval별로 다르게 설정)
       let maxVisibleBars: number;
       if (selectedOption.interval.startsWith('min:')) {
-        maxVisibleBars = 300; // 분봉: 최대 200개 캔들
+        maxVisibleBars = 300; // 분봉: 최대 300개 캔들
       } else if (selectedOption.interval.startsWith('day:')) {
         maxVisibleBars = 180; // 일봉: 최대 180개 캔들 (약 6개월)
       } else if (selectedOption.interval.startsWith('week:')) {
         maxVisibleBars = 104; // 주봉: 최대 104개 캔들 (약 2년)
       } else if (selectedOption.interval.startsWith('month:')) {
-        maxVisibleBars = 110; // 월봉: 최대 60개 캔들 (약 5년)
+        maxVisibleBars = 110; // 월봉: 최대 110개 캔들 (약 9년)
       } else {
-        maxVisibleBars = 30; // 년봉: 최대 20개 캔들
+        maxVisibleBars = 30; // 년봉: 최대 30개 캔들
       }
 
       if (rangeSize > maxVisibleBars) {
@@ -525,15 +525,9 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
             return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
           }
 
-          // 파싱 실패 시 현재 시간 반환
-          const now = new Date();
-          const year = now.getFullYear();
-          const month = String(now.getMonth() + 1).padStart(2, '0');
-          const day = String(now.getDate()).padStart(2, '0');
-          const hour = String(now.getHours()).padStart(2, '0');
-          const minute = String(now.getMinutes()).padStart(2, '0');
-          const second = String(now.getSeconds()).padStart(2, '0');
-          return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+          // 파싱 실패 시 현재 KST 시간 반환
+          const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+          return kstNow.toISOString().slice(0, 19);
         };
 
         const executionDateTime = parseExecutionDateTime(executionData.businessDate, executionData.executionTime);
@@ -612,6 +606,7 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
         const existingIndex = chartData.findIndex((item) => item.dateTime === normalizedDateTime);
 
         let realtimeCandle: ChartData;
+        let updatedChartData: ChartData[];
 
         if (existingIndex >= 0) {
           // chartData에 이미 존재하는 캔들 업데이트
@@ -625,8 +620,10 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
             accumulatedAmount: accumulatedAmount,
           };
 
-          // chartData 업데이트 (state는 업데이트하지 않고 배열만 수정)
-          chartData[existingIndex] = realtimeCandle;
+          // chartData 업데이트 (불변성 유지)
+          updatedChartData = [...chartData];
+          updatedChartData[existingIndex] = realtimeCandle;
+          setChartData(updatedChartData);
         } else {
           // 새로운 캔들 생성
           realtimeCandle = {
@@ -640,9 +637,10 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
             accumulatedAmount: accumulatedAmount,
           };
 
-          // chartData에 추가 (state는 업데이트하지 않고 배열만 수정)
-          chartData.push(realtimeCandle);
-          chartData.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
+          // chartData에 추가 (불변성 유지)
+          updatedChartData = [...chartData, realtimeCandle];
+          updatedChartData.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
+          setChartData(updatedChartData);
         }
 
         // 실시간 캔들 저장
@@ -681,7 +679,7 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
       console.log('[StockChart] Unsubscribing from WebSocket for:', shortCode);
       websocketService.unsubscribe(shortCode);
     };
-  }, [shortCode, selectedOption.interval, basePrice]);
+  }, [shortCode, selectedOption.interval, basePrice, chartType, chartData]);
 
   const handleGroupChange = (groupIndex: number) => {
     setSelectedGroupIndex(groupIndex);

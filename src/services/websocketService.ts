@@ -115,6 +115,13 @@ class WebSocketService {
   private replySubscription: StompSubscription | null = null;
   private connected = false;
   private connectPromise: Promise<void> | null = null;
+  // 재연결을 위한 구독 정보 저장
+  private pendingSubscriptions: Map<string, {
+    onAskBid: AskBidCallback;
+    onExecution: ExecutionCallback;
+    onReply?: ReplyCallback;
+    onError?: ErrorCallback;
+  }> = new Map();
 
   constructor() {
     this.initializeClient();
@@ -133,10 +140,12 @@ class WebSocketService {
         console.log('[WebSocket] Connected');
         this.connected = true;
         this.setupReplySubscription();
+        this.restoreSubscriptions();
       },
       onDisconnect: () => {
         console.log('[WebSocket] Disconnected');
         this.connected = false;
+        // 구독 정보는 유지하고 subscription 객체만 정리
         this.subscriptions.clear();
         this.replySubscription = null;
       },
@@ -157,6 +166,24 @@ class WebSocketService {
       } catch (error) {
         console.error('[WebSocket] Failed to parse reply:', error);
       }
+    });
+  }
+
+  private restoreSubscriptions() {
+    console.log('[WebSocket] Restoring subscriptions...');
+
+    // pendingSubscriptions에 저장된 구독 정보로 재구독
+    this.pendingSubscriptions.forEach((callbacks, stockCode) => {
+      console.log(`[WebSocket] Restoring subscription for ${stockCode}`);
+      this.subscribe(
+        stockCode,
+        callbacks.onAskBid,
+        callbacks.onExecution,
+        callbacks.onReply,
+        callbacks.onError
+      ).catch(error => {
+        console.error(`[WebSocket] Failed to restore subscription for ${stockCode}:`, error);
+      });
     });
   }
 
@@ -228,10 +255,27 @@ class WebSocketService {
         throw new Error('WebSocket not connected');
       }
 
-      // 이미 구독 중이면 무시
-      if (this.subscriptions.has(`askbid-${stockCode}`) || this.subscriptions.has(`execution-${stockCode}`)) {
+      // 이미 완전히 구독 중이면 무시 (두 채널 모두 구독되어 있어야 함)
+      const hasAskBid = this.subscriptions.has(`askbid-${stockCode}`);
+      const hasExecution = this.subscriptions.has(`execution-${stockCode}`);
+
+      if (hasAskBid && hasExecution) {
         console.log(`[WebSocket] Already subscribed to ${stockCode}`);
         return;
+      }
+
+      // 부분 구독 상태면 정리
+      if (hasAskBid && !hasExecution) {
+        console.warn(`[WebSocket] Partial subscription detected for ${stockCode}, cleaning up askbid`);
+        const askBidSub = this.subscriptions.get(`askbid-${stockCode}`);
+        askBidSub?.unsubscribe();
+        this.subscriptions.delete(`askbid-${stockCode}`);
+      }
+      if (hasExecution && !hasAskBid) {
+        console.warn(`[WebSocket] Partial subscription detected for ${stockCode}, cleaning up execution`);
+        const executionSub = this.subscriptions.get(`execution-${stockCode}`);
+        executionSub?.unsubscribe();
+        this.subscriptions.delete(`execution-${stockCode}`);
       }
 
       // 1. /topic/stock/askbid/{shortCode} 구독
@@ -279,6 +323,14 @@ class WebSocketService {
       });
 
       console.log(`[WebSocket] Subscription request sent for ${stockCode}`);
+
+      // 재연결을 위해 구독 정보 저장
+      this.pendingSubscriptions.set(stockCode, {
+        onAskBid,
+        onExecution,
+        onReply,
+        onError,
+      });
 
       if (onReply) {
         onReply({
@@ -330,6 +382,9 @@ class WebSocketService {
         this.subscriptions.delete(`execution-${stockCode}`);
         console.log(`[WebSocket] Unsubscribed from /topic/stock/execution/${stockCode}`);
       }
+
+      // pendingSubscriptions에서도 제거
+      this.pendingSubscriptions.delete(stockCode);
 
       console.log(`[WebSocket] Unsubscribed from ${stockCode}`);
     } catch (error) {
