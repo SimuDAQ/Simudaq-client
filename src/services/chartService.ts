@@ -1,6 +1,6 @@
 import { ChartResponse, ApiResponse } from "@/types/chart";
 
-const API_BASE_URL = import.meta.env.LOCAL_API_BASE_URL || "http://localhost:8080";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
 export interface GetChartParams {
   stockCode: string;

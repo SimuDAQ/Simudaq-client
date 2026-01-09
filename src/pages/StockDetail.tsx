@@ -106,9 +106,11 @@ const StockDetail = () => {
           </div>
 
           {/* Chart */}
-          <div className="mb-6">
-            <StockChart basePrice={stock.price} change={stock.change} />
-          </div>
+          {code && (
+            <div className="mb-6">
+              <StockChart stockCode={code} basePrice={stock.price} change={stock.change} />
+            </div>
+          )}
 
           {/* Info Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

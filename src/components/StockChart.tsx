@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, IChartApi, UTCTimestamp } from "lightweight-charts";
 import { cn } from "@/lib/utils";
 import { chartService } from "@/services/chartService";
+import { websocketService, StockExecutionData, StockAskBidData } from "@/services/websocketService";
 import { ChartData } from "@/types/chart";
 
 interface StockChartProps {
@@ -54,6 +55,7 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [shortCode, setShortCode] = useState<string | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<IChartApi | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,6 +65,8 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
   const isLoadingRef = useRef(false);
   const shouldLoadMoreRef = useRef(false);
   const isInitialLoadRef = useRef(true); // 초기 로드 여부 추적
+  const lastUpdateTimeRef = useRef<string | null>(null); // 마지막 실시간 업데이트 시간
+  const realtimeCandleRef = useRef<Map<string, ChartData>>(new Map()); // 실시간 캔들 데이터 저장
 
   const isPositive = change >= 0;
   const selectedOption = periodGroups[selectedGroupIndex].options[selectedOptionIndex];
@@ -148,6 +152,9 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
 
       setChartData(response.candles);
       nextDateTimeRef.current = response.nextDateTime;
+
+      // stockCode가 실제로는 shortCode이므로 WebSocket 구독에 사용
+      setShortCode(response.stockCode);
     } catch (error) {
       console.error("Failed to fetch chart data:", error);
       setChartData([]);
@@ -158,6 +165,9 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
   };
 
   useEffect(() => {
+    // 차트 변경 시 실시간 캔들 데이터 초기화
+    realtimeCandleRef.current.clear();
+    lastUpdateTimeRef.current = null;
     loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockCode, selectedGroupIndex, selectedOptionIndex]);
@@ -258,15 +268,15 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
       // 최대 줌 아웃 제한 (interval별로 다르게 설정)
       let maxVisibleBars: number;
       if (selectedOption.interval.startsWith('min:')) {
-        maxVisibleBars = 200; // 분봉: 최대 200개 캔들
+        maxVisibleBars = 300; // 분봉: 최대 300개 캔들
       } else if (selectedOption.interval.startsWith('day:')) {
         maxVisibleBars = 180; // 일봉: 최대 180개 캔들 (약 6개월)
       } else if (selectedOption.interval.startsWith('week:')) {
         maxVisibleBars = 104; // 주봉: 최대 104개 캔들 (약 2년)
       } else if (selectedOption.interval.startsWith('month:')) {
-        maxVisibleBars = 60; // 월봉: 최대 60개 캔들 (약 5년)
+        maxVisibleBars = 110; // 월봉: 최대 110개 캔들 (약 9년)
       } else {
-        maxVisibleBars = 20; // 년봉: 최대 20개 캔들
+        maxVisibleBars = 30; // 년봉: 최대 30개 캔들
       }
 
       if (rangeSize > maxVisibleBars) {
@@ -476,6 +486,200 @@ const StockChart = ({ stockCode, basePrice, change }: StockChartProps) => {
       isInitialLoadRef.current = false;
     }
   }, [chartData, selectedOption.interval, chartType]);
+
+  // WebSocket 구독 관리 (모든 차트 타입에서 실시간 데이터 구독)
+  useEffect(() => {
+    // shortCode가 없으면 구독하지 않음
+    if (!shortCode) {
+      return;
+    }
+
+    console.log('[StockChart] Subscribing to WebSocket for:', shortCode);
+
+    // 선택된 차트 간격 파싱
+    const [intervalType, intervalValueStr] = selectedOption.interval.split(':');
+    const intervalValue = parseInt(intervalValueStr);
+
+    // WebSocket 구독
+    websocketService.subscribe(
+      shortCode,
+      // onAskBid - 호가 데이터 (차트에는 사용하지 않음)
+      (askBidData: StockAskBidData) => {
+        console.log('[StockChart] AskBid data received:', askBidData);
+        // 호가 데이터는 차트에 반영하지 않음
+      },
+      // onExecution - 체결 데이터 (차트에 반영)
+      (executionData: StockExecutionData) => {
+        console.log('[StockChart] Execution data received:', executionData);
+
+        // businessDate(YYYYMMDD)와 executionTime(HHmmss)을 결합
+        const parseExecutionDateTime = (businessDate: string, executionTime: string): string => {
+          if (businessDate.length === 8 && executionTime.length === 6) {
+            const year = businessDate.substring(0, 4);
+            const month = businessDate.substring(4, 6);
+            const day = businessDate.substring(6, 8);
+            const hour = executionTime.substring(0, 2);
+            const minute = executionTime.substring(2, 4);
+            const second = executionTime.substring(4, 6);
+
+            return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+          }
+
+          // 파싱 실패 시 현재 KST 시간 반환
+          const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+          return kstNow.toISOString().slice(0, 19);
+        };
+
+        const executionDateTime = parseExecutionDateTime(executionData.businessDate, executionData.executionTime);
+        console.log('[StockChart] Parsed execution dateTime:', executionDateTime);
+
+        // 차트 간격에 맞춰 시간을 정규화
+        const normalizeDateTime = (dateTimeStr: string, type: string, value: number): string => {
+          const date = new Date(dateTimeStr);
+
+          switch (type) {
+            case 'min': {
+              // 분봉: 분 단위로 정규화
+              const minutes = date.getMinutes();
+              const normalizedMinutes = Math.floor(minutes / value) * value;
+              date.setMinutes(normalizedMinutes);
+              date.setSeconds(0);
+              break;
+            }
+            case 'day': {
+              // 일봉: 날짜 단위로 정규화 (시간/분/초 = 0)
+              date.setHours(0, 0, 0, 0);
+              break;
+            }
+            case 'week': {
+              // 주봉: 주의 시작일(월요일)로 정규화
+              const dayOfWeek = date.getDay();
+              const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // 일요일이면 6일 전, 아니면 요일-1
+              date.setDate(date.getDate() - diff);
+              date.setHours(0, 0, 0, 0);
+              break;
+            }
+            case 'month': {
+              // 월봉: 월의 1일로 정규화
+              date.setDate(1);
+              date.setHours(0, 0, 0, 0);
+              break;
+            }
+            case 'year': {
+              // 년봉: 연도의 1월 1일로 정규화
+              date.setMonth(0, 1);
+              date.setHours(0, 0, 0, 0);
+              break;
+            }
+          }
+
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const hour = String(date.getHours()).padStart(2, '0');
+          const minute = String(date.getMinutes()).padStart(2, '0');
+          const second = String(date.getSeconds()).padStart(2, '0');
+
+          return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+        };
+
+        const normalizedDateTime = normalizeDateTime(executionDateTime, intervalType, intervalValue);
+
+        if (!seriesRef.current) return;
+
+        const currentPrice = parseFloat(executionData.currentPrice);
+        const volume = parseInt(executionData.executionVolume);
+        const accumulatedAmount = parseFloat(executionData.accumulatedTradeAmount);
+
+        // timestamp로 변환
+        const parseKSTtoTimestamp = (dateTimeStr: string): UTCTimestamp => {
+          const [datePart, timePart] = dateTimeStr.split('T');
+          const [year, month, day] = datePart.split('-').map(Number);
+          const [hour, minute, second] = timePart.split(':').map(Number);
+          const timestamp = Date.UTC(year, month - 1, day, hour, minute, second);
+          return Math.floor(timestamp / 1000) as UTCTimestamp;
+        };
+
+        const timestamp = parseKSTtoTimestamp(normalizedDateTime);
+
+        // chartData에서 기존 캔들 찾기
+        const existingIndex = chartData.findIndex((item) => item.dateTime === normalizedDateTime);
+
+        let realtimeCandle: ChartData;
+        let updatedChartData: ChartData[];
+
+        if (existingIndex >= 0) {
+          // chartData에 이미 존재하는 캔들 업데이트
+          const existingCandle = chartData[existingIndex];
+          realtimeCandle = {
+            ...existingCandle,
+            high: Math.max(existingCandle.high, currentPrice),
+            low: Math.min(existingCandle.low, currentPrice),
+            close: currentPrice,
+            volume: existingCandle.volume + volume,
+            accumulatedAmount: accumulatedAmount,
+          };
+
+          // chartData 업데이트 (불변성 유지)
+          updatedChartData = [...chartData];
+          updatedChartData[existingIndex] = realtimeCandle;
+          setChartData(updatedChartData);
+        } else {
+          // 새로운 캔들 생성
+          realtimeCandle = {
+            dateTime: normalizedDateTime,
+            base: basePrice,
+            open: currentPrice,
+            high: currentPrice,
+            low: currentPrice,
+            close: currentPrice,
+            volume: volume,
+            accumulatedAmount: accumulatedAmount,
+          };
+
+          // chartData에 추가 (불변성 유지)
+          updatedChartData = [...chartData, realtimeCandle];
+          updatedChartData.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
+          setChartData(updatedChartData);
+        }
+
+        // 실시간 캔들 저장
+        realtimeCandleRef.current.set(normalizedDateTime, realtimeCandle);
+
+        // 차트에 직접 update (setData가 아닌 update 사용)
+        if (chartType === 'candlestick') {
+          seriesRef.current.update({
+            time: timestamp,
+            open: realtimeCandle.open,
+            high: realtimeCandle.high,
+            low: realtimeCandle.low,
+            close: realtimeCandle.close,
+          });
+        } else {
+          seriesRef.current.update({
+            time: timestamp,
+            value: realtimeCandle.close,
+          });
+        }
+
+        lastUpdateTimeRef.current = normalizedDateTime;
+      },
+      // onReply
+      (response) => {
+        console.log('[StockChart] Subscription response:', response);
+      },
+      // onError
+      (error) => {
+        console.error('[StockChart] WebSocket error:', error);
+      }
+    );
+
+    // 컴포넌트 언마운트 또는 stockCode 변경 시 구독 해제
+    return () => {
+      console.log('[StockChart] Unsubscribing from WebSocket for:', shortCode);
+      websocketService.unsubscribe(shortCode);
+    };
+  }, [shortCode, selectedOption.interval, basePrice, chartType, chartData]);
 
   const handleGroupChange = (groupIndex: number) => {
     setSelectedGroupIndex(groupIndex);
